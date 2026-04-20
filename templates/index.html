@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BotDash</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="page-shell">
+    <div class="page">
+      <header class="topbar glass">
+        <div class="brand-wrap">
+          <div class="brand">BotDash <span class="dot"></span></div>
+          <div class="brand-sub">Forward-test monitor for live bot activity</div>
+        </div>
+
+        <div class="top-actions">
+          <div class="status-badges">
+            <span class="status-chip neutral" id="botStateChip">Dashboard Live</span>
+            <span class="status-chip neutral" id="apiStateChip">Checking API</span>
+          </div>
+
+          <div class="toolbar">
+            <span id="lastUpdated" class="updated-text">Updated --:--:--</span>
+            <select id="refreshSelect" aria-label="Auto refresh">
+              <option value="0">No auto-refresh</option>
+              <option value="5">Every 5 sec</option>
+              <option value="10" selected>Every 10 sec</option>
+              <option value="30">Every 30 sec</option>
+              <option value="60">Every 60 sec</option>
+            </select>
+            <button id="refreshBtn">Refresh</button>
+          </div>
+        </div>
+      </header>
+
+      <section class="summary-grid" id="summaryGrid">
+        <div class="card metric accent-blue">
+          <div class="label">USDT Balance</div>
+          <div class="value" id="usdtBalance">--</div>
+          <div class="sub" id="walletSub">Available in wallet</div>
+        </div>
+        <div class="card metric accent-purple">
+          <div class="label">Total P&amp;L (USDT)</div>
+          <div class="value" id="totalPnl">--</div>
+          <div class="sub" id="pnlSub">Closed trades only</div>
+        </div>
+        <div class="card metric accent-cyan">
+          <div class="label">Win Rate</div>
+          <div class="value" id="winRate">--</div>
+          <div class="sub" id="winSub">0W / 0L</div>
+        </div>
+        <div class="card metric accent-amber">
+          <div class="label">Today's P&amp;L</div>
+          <div class="value" id="todayPnl">--</div>
+          <div class="sub" id="todaySub">Closed today UTC</div>
+        </div>
+        <div class="card metric accent-green">
+          <div class="label">Open Positions</div>
+          <div class="value" id="openCount">0</div>
+          <div class="sub">Live tracker</div>
+        </div>
+        <div class="card metric accent-slate">
+          <div class="label">Total Trades</div>
+          <div class="value" id="totalTrades">0</div>
+          <div class="sub">Closed trades</div>
+        </div>
+      </section>
+
+      <section class="status-grid">
+        <div class="card glass">
+          <div class="section-head">
+            <div>
+              <div class="section-title">Strategies</div>
+              <div class="section-sub">Performance snapshot by strategy</div>
+            </div>
+          </div>
+
+          <div class="strategy-list">
+            <div class="strategy-box s1-box">
+              <div class="strategy-topline">
+                <div class="strategy-name s1">S1 — EMA CROSS</div>
+                <span class="mini-chip">Cross + confirmation filters</span>
+              </div>
+              <div class="strategy-stats">
+                <div><span>Trades</span><strong id="s1Trades">0</strong></div>
+                <div><span>Win Rate</span><strong id="s1WinRate">0%</strong></div>
+                <div><span>P&amp;L</span><strong id="s1Pnl">0.00</strong></div>
+                <div><span>Consec. Losses</span><strong id="s1Losses">0</strong></div>
+              </div>
+            </div>
+
+            <div class="strategy-box s2-box">
+              <div class="strategy-topline">
+                <div class="strategy-name s2">S2 — MA44 BOUNCE</div>
+                <span class="mini-chip">Short-only bounce setup</span>
+              </div>
+              <div class="strategy-stats">
+                <div><span>Trades</span><strong id="s2Trades">0</strong></div>
+                <div><span>Win Rate</span><strong id="s2WinRate">0%</strong></div>
+                <div><span>P&amp;L</span><strong id="s2Pnl">0.00</strong></div>
+                <div><span>Consec. Losses</span><strong id="s2Losses">0</strong></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card glass api-status">
+          <div class="section-head">
+            <div>
+              <div class="section-title">API Status</div>
+              <div class="section-sub">Connectivity and tracker health</div>
+            </div>
+          </div>
+          <ul id="statusList" class="status-list">
+            <li>Loading…</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="main-grid">
+        <div class="card glass span-2">
+          <div class="section-head row-between">
+            <div>
+              <div class="section-title">Open Positions</div>
+              <div class="section-sub">Active futures positions tracked by the bot</div>
+            </div>
+            <span class="pill" id="openPositionsPill">0 / 30</span>
+          </div>
+          <div id="openPositions" class="positions-grid empty">No open positions</div>
+        </div>
+
+        <div class="card glass wallet-card">
+          <div class="section-head row-between">
+            <div>
+              <div class="section-title">Wallet</div>
+              <div class="section-sub">Non-zero tracked balances</div>
+            </div>
+            <span class="pill" id="walletAssetsCount">0 assets</span>
+          </div>
+          <div id="walletAssets" class="wallet-list empty">No wallet data</div>
+        </div>
+      </section>
+
+      <section class="card glass trade-card">
+        <div class="section-head row-between trade-head">
+          <div>
+            <div class="section-title">Trade History</div>
+            <div class="section-sub">Closed trades with client-side filters</div>
+          </div>
+          <span class="pill" id="tradeCountPill">0 trades</span>
+        </div>
+
+        <div class="filters-row">
+          <input id="tradeSearch" type="text" placeholder="Filter symbol..." aria-label="Filter by symbol">
+          <select id="outcomeFilter" aria-label="Filter by outcome">
+            <option value="ALL">All outcomes</option>
+            <option value="WIN">Wins</option>
+            <option value="LOSS">Losses</option>
+            <option value="MANUAL_CLOSE">Manual close</option>
+          </select>
+          <select id="sideFilter" aria-label="Filter by side">
+            <option value="ALL">All sides</option>
+            <option value="LONG">Long</option>
+            <option value="SHORT">Short</option>
+          </select>
+          <select id="strategyFilter" aria-label="Filter by strategy">
+            <option value="ALL">All strategies</option>
+            <option value="S1_EMA_CROSS">S1</option>
+            <option value="S2_MA44_BOUNCE">S2</option>
+          </select>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Opened / Closed</th>
+                <th>Symbol</th>
+                <th>Strategy</th>
+                <th>Side</th>
+                <th>Entry</th>
+                <th>Exit / SL / TP</th>
+                <th>Result</th>
+                <th>P&amp;L $</th>
+                <th>Fee $</th>
+                <th>P&amp;L %</th>
+              </tr>
+            </thead>
+            <tbody id="tradeRows">
+              <tr><td colspan="10" class="muted center">No trades yet</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  </div>
+  <script src="/static/app.js"></script>
+</body>
+</html>
