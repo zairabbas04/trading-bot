@@ -266,7 +266,7 @@ def compute_indicators(candles):
         if ma44_now > 0:
             ma44_slope_8bar = (ma44_now - ma44_8ago) / ma44_now * 100
 
-    # ── MA44 accel (F6 of S2) ────────────────────────────────────────────────
+    # ── MA44 accel (retained for future strategies; not used by S1) ──────────
     ma44_accel = None
     if n >= MA44_PERIOD + 8:
         ma44_now   = sum(closes[-MA44_PERIOD:])       / MA44_PERIOD
@@ -297,7 +297,7 @@ def compute_indicators(candles):
         'di_plus':    di_pos,
         'di_minus':   di_neg,
 
-        # S2 indicators
+        # Extra indicators (MA44, ATR) — retained for compatibility; S1 does not use them
         'ma44':           ma44,
         'ma44_slope_8bar': ma44_slope_8bar,
         'ma44_accel':     ma44_accel,
