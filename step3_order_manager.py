@@ -6,9 +6,8 @@ Changes in this version:
   - Isolated margin mode per trade
   - Strategy-specific sizing:
       S1 (EMA Cross)    → $20 margin × 50x leverage ($1,000 notional)
-      S2 (MA44 Bounce)  → $16.65 margin × 15x leverage ($249.75 notional)
   - Global cap: max 10 open positions at once (new signals ignored above limit)
-  - Consecutive-loss counters per strategy exposed for dashboard
+  - Consecutive-loss counter exposed for dashboard
   - pnl_usdt stored alongside pnl_pct in trade log
   - Fixed scientific notation bug (_fmt_price) retained from previous version
   - Fix: maxQty cap to prevent Exceeded maximum allowable position (Error -2027)
@@ -68,10 +67,8 @@ POSITION_CAPS = {
 }
 
 STRATEGY_CONFIG = {
-    'S1':            {'margin_usdt': 20.0,   'leverage': 50},   # EMA Cross   — $1,000 notional target
+    'S1':            {'margin_usdt': 20.0,   'leverage': 50},   # EMA Cross — $1,000 notional target
     'S1_EMA_CROSS':  {'margin_usdt': 20.0,   'leverage': 50},
-    'S2':            {'margin_usdt': 16.65,  'leverage': 15},   # MA44 Bounce — $249.75 notional target
-    'S2_MA44_BOUNCE':{'margin_usdt': 16.65,  'leverage': 15},
 }
 DEFAULT_MARGIN   = 20.0
 DEFAULT_LEVERAGE = 50
@@ -594,7 +591,7 @@ class OrderManager:
         self._pending_symbols = set()
 
         # Consecutive loss counters per strategy
-        self._consec_losses   = {'S1': 0, 'S2': 0}
+        self._consec_losses   = {'S1': 0}
 
         # In-memory history loaded from Supabase on startup
         self.closed_positions = []
@@ -675,9 +672,6 @@ class OrderManager:
                 return
             if symbol in self._pending_symbols:
                 log.info(f"[SKIP] {symbol}: entry already in progress")
-                return
-            if strategy.startswith('S2') and self._consec_losses.get('S2', 0) >= 2:
-                log.info(f"[SKIP] S2 paused after {self._consec_losses['S2']} consecutive losses")
                 return
             self._pending_symbols.add(symbol)
 
@@ -1040,7 +1034,8 @@ class OrderManager:
 
                 with self._lock:
                     self._open_positions.pop(pos.symbol, None)
-                    strat = pos.strategy
+                    # Normalize strategy full-name ('S1_EMA_CROSS') to short key ('S1')
+                    strat = pos.strategy.split('_')[0] if pos.strategy else 'S1'
                     if outcome == 'WIN':
                         self._consec_losses[strat] = 0
                     else:
@@ -1091,7 +1086,8 @@ class OrderManager:
 
                             with self._lock:
                                 self._open_positions.pop(pos.symbol, None)
-                                strat = pos.strategy
+                                # Normalize strategy full-name ('S1_EMA_CROSS') to short key ('S1')
+                                strat = pos.strategy.split('_')[0] if pos.strategy else 'S1'
                                 if outcome == 'WIN':
                                     self._consec_losses[strat] = 0
                                 else:
