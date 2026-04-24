@@ -4,24 +4,35 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>BotDash</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
+  <div class="app-bg" aria-hidden="true">
+    <span class="orb orb-one"></span>
+    <span class="orb orb-two"></span>
+    <span class="orb orb-three"></span>
+    <span class="grid-fade"></span>
+  </div>
+
   <div class="page-shell">
     <div class="page">
-      <header class="topbar glass">
-        <div class="brand-wrap">
-          <div class="brand">BotDash <span class="dot"></span></div>
-          <div class="brand-sub">Forward-test monitor for live bot activity</div>
+      <header class="hero-panel glass">
+        <div class="hero-copy">
+          <div class="eyebrow"><span class="pulse-dot"></span> Forward-test monitor</div>
+          <h1>BotDash</h1>
+          <p>Live trading intelligence for bot activity, wallet health, open positions, strategy performance, and closed-trade analytics.</p>
         </div>
 
-        <div class="top-actions">
+        <div class="hero-actions">
           <div class="status-badges">
             <span class="status-chip neutral" id="botStateChip">Dashboard Live</span>
             <span class="status-chip neutral" id="apiStateChip">Checking API</span>
           </div>
 
-          <div class="toolbar">
+          <div class="toolbar glass-lite">
             <span id="lastUpdated" class="updated-text">Updated --:--:--</span>
             <select id="refreshSelect" aria-label="Auto refresh">
               <option value="0">No auto-refresh</option>
@@ -30,38 +41,44 @@
               <option value="30">Every 30 sec</option>
               <option value="60">Every 60 sec</option>
             </select>
-            <button id="refreshBtn">Refresh</button>
+            <button id="refreshBtn" type="button">Refresh</button>
           </div>
         </div>
       </header>
 
       <section class="summary-grid" id="summaryGrid">
         <div class="card metric accent-blue">
+          <div class="metric-icon">$</div>
           <div class="label">USDT Balance</div>
           <div class="value" id="usdtBalance">--</div>
           <div class="sub" id="walletSub">Available in wallet</div>
         </div>
         <div class="card metric accent-purple">
-          <div class="label">Total P&amp;L (USDT)</div>
+          <div class="metric-icon">P/L</div>
+          <div class="label">Total P&amp;L</div>
           <div class="value" id="totalPnl">--</div>
           <div class="sub" id="pnlSub">Closed trades only</div>
         </div>
         <div class="card metric accent-cyan">
+          <div class="metric-icon">%</div>
           <div class="label">Win Rate</div>
           <div class="value" id="winRate">--</div>
           <div class="sub" id="winSub">0W / 0L</div>
         </div>
         <div class="card metric accent-amber">
+          <div class="metric-icon">24h</div>
           <div class="label">Today's P&amp;L</div>
           <div class="value" id="todayPnl">--</div>
           <div class="sub" id="todaySub">Closed today UTC</div>
         </div>
         <div class="card metric accent-green">
+          <div class="metric-icon">LIVE</div>
           <div class="label">Open Positions</div>
           <div class="value" id="openCount">0</div>
           <div class="sub">Live tracker</div>
         </div>
         <div class="card metric accent-slate">
+          <div class="metric-icon">#</div>
           <div class="label">Total Trades</div>
           <div class="value" id="totalTrades">0</div>
           <div class="sub">Closed trades</div>
@@ -69,7 +86,7 @@
       </section>
 
       <section class="status-grid">
-        <div class="card glass">
+        <div class="card glass card-glow">
           <div class="section-head">
             <div>
               <div class="section-title">Strategies</div>
@@ -91,7 +108,7 @@
               </div>
             </div>
 
-            <<div class="strategy-box s2-box">
+            <div class="strategy-box s2-box">
               <div class="strategy-topline">
                 <div class="strategy-name s2">S2 — MA44 BOUNCE</div>
                 <span class="mini-chip">Short-only bounce setup</span>
@@ -106,7 +123,7 @@
           </div>
         </div>
 
-        <div class="card glass api-status">
+        <div class="card glass api-status card-glow">
           <div class="section-head">
             <div>
               <div class="section-title">API Status</div>
@@ -114,13 +131,13 @@
             </div>
           </div>
           <ul id="statusList" class="status-list">
-            <li>Loading…</li>
+            <li>Loading...</li>
           </ul>
         </div>
       </section>
 
       <section class="main-grid">
-        <div class="card glass span-2">
+        <div class="card glass span-2 card-glow">
           <div class="section-head row-between">
             <div>
               <div class="section-title">Open Positions</div>
@@ -131,7 +148,7 @@
           <div id="openPositions" class="positions-grid empty">No open positions</div>
         </div>
 
-        <div class="card glass wallet-card">
+        <div class="card glass wallet-card card-glow">
           <div class="section-head row-between">
             <div>
               <div class="section-title">Wallet</div>
@@ -143,7 +160,7 @@
         </div>
       </section>
 
-      <section class="card glass trade-card">
+      <section class="card glass trade-card card-glow">
         <div class="section-head row-between trade-head">
           <div>
             <div class="section-title">Trade History</div>
@@ -153,7 +170,7 @@
         </div>
 
         <div class="filters-row">
-          <input id="tradeSearch" type="text" placeholder="Filter symbol..." aria-label="Filter by symbol">
+          <input id="tradeSearch" type="text" placeholder="Search symbol..." aria-label="Filter by symbol">
           <select id="outcomeFilter" aria-label="Filter by outcome">
             <option value="ALL">All outcomes</option>
             <option value="WIN">Wins</option>
