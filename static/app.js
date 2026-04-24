@@ -17,6 +17,7 @@ let latestTrades = [];
 
 async function getJson(url) {
   const res = await fetch(url);
+  if (!res.ok) throw new Error(`${url} returned ${res.status}`);
   return await res.json();
 }
 
@@ -59,27 +60,35 @@ function updateChip(id, label, state = 'neutral') {
   el.className = `status-chip ${state}`;
 }
 
+function setText(id, value) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = value;
+}
+
 function renderSummary(account, stats, summary) {
   const assets = Array.isArray(account.assets) ? account.assets : [];
   const usdt = assets.find(a => a.asset === 'USDT');
 
-  document.getElementById('usdtBalance').textContent = usdt ? `$${fmtNum(usdt.availableBalance)}` : '--';
-  document.getElementById('walletSub').textContent = usdt ? `Available in wallet` : `Waiting for wallet response`;
+  setText('usdtBalance', usdt ? `$${fmtNum(usdt.availableBalance)}` : '--');
+  setText('walletSub', usdt ? 'Available in wallet' : 'Waiting for wallet response');
 
-  document.getElementById('totalPnl').textContent = `${summary.pnl >= 0 ? '+' : ''}$${fmtNum(summary.pnl)}`;
-  document.getElementById('totalPnl').className = `value ${textClass(summary.pnl)}`;
+  const totalPnl = document.getElementById('totalPnl');
+  totalPnl.textContent = `${summary.pnl >= 0 ? '+' : ''}$${fmtNum(summary.pnl)}`;
+  totalPnl.className = `value ${textClass(summary.pnl)}`;
 
-  document.getElementById('todayPnl').textContent = `${summary.todayPnl >= 0 ? '+' : ''}$${fmtNum(summary.todayPnl)}`;
-  document.getElementById('todayPnl').className = `value ${textClass(summary.todayPnl)}`;
+  const todayPnl = document.getElementById('todayPnl');
+  todayPnl.textContent = `${summary.todayPnl >= 0 ? '+' : ''}$${fmtNum(summary.todayPnl)}`;
+  todayPnl.className = `value ${textClass(summary.todayPnl)}`;
 
   const total = summary.wins + summary.losses;
   const wr = total ? (summary.wins * 100 / total) : 0;
-  document.getElementById('winRate').textContent = fmtPct(wr, 1);
-  document.getElementById('winRate').className = `value ${textClass(wr === 0 ? NaN : wr - 50)}`;
-  document.getElementById('winSub').textContent = `${summary.wins}W / ${summary.losses}L`;
+  const winRate = document.getElementById('winRate');
+  winRate.textContent = fmtPct(wr, 1);
+  winRate.className = `value ${textClass(wr === 0 ? NaN : wr - 50)}`;
+  setText('winSub', `${summary.wins}W / ${summary.losses}L`);
 
-  document.getElementById('openCount').textContent = `${stats.open_count || 0}`;
-  document.getElementById('totalTrades').textContent = `${summary.trades.length}`;
+  setText('openCount', `${stats.open_count || 0}`);
+  setText('totalTrades', `${summary.trades.length}`);
 }
 
 function renderStrategies(stats, summary) {
@@ -88,11 +97,12 @@ function renderStrategies(stats, summary) {
 
   const set = (prefix, data, losses) => {
     const wr = data.trades ? (data.wins * 100 / data.trades) : 0;
-    document.getElementById(`${prefix}Trades`).textContent = `${data.trades}`;
-    document.getElementById(`${prefix}WinRate`).textContent = fmtPct(wr, 0);
-    document.getElementById(`${prefix}Pnl`).textContent = `${data.pnl >= 0 ? '+' : ''}${fmtNum(data.pnl)}`;
-    document.getElementById(`${prefix}Pnl`).className = textClass(data.pnl);
-    document.getElementById(`${prefix}Losses`).textContent = `${losses || 0}`;
+    setText(`${prefix}Trades`, `${data.trades}`);
+    setText(`${prefix}WinRate`, fmtPct(wr, 0));
+    const pnlEl = document.getElementById(`${prefix}Pnl`);
+    pnlEl.textContent = `${data.pnl >= 0 ? '+' : ''}${fmtNum(data.pnl)}`;
+    pnlEl.className = textClass(data.pnl);
+    setText(`${prefix}Losses`, `${losses || 0}`);
   };
 
   set('s1', s1, stats.consec_losses?.S1_EMA_CROSS ?? stats.consec_losses?.S1 ?? 0);
@@ -102,7 +112,7 @@ function renderStrategies(stats, summary) {
 function renderWallet(account) {
   const assets = (account.assets || []).filter(a => Number(a.walletBalance || a.balance || 0) > 0 || Number(a.availableBalance || 0) > 0);
   const box = document.getElementById('walletAssets');
-  document.getElementById('walletAssetsCount').textContent = `${assets.length} assets`;
+  setText('walletAssetsCount', `${assets.length} assets`);
 
   if (!assets.length) {
     box.className = 'wallet-list empty';
@@ -126,7 +136,7 @@ function renderWallet(account) {
 
 function renderPositions(positions) {
   const box = document.getElementById('openPositions');
-  document.getElementById('openPositionsPill').textContent = `${positions.length} / 30`;
+  setText('openPositionsPill', `${positions.length} / 30`);
 
   if (!positions.length) {
     box.className = 'positions-grid empty';
@@ -154,7 +164,7 @@ function renderPositions(positions) {
         </div>
         <div class="kv">
           <div class="k">Entry</div><div>${fmtNum(p.entry_price, 6)}</div>
-          <div class="k">Margin</div><div>$${fmtNum(p.margin_usdt)} × ${p.leverage}x</div>
+          <div class="k">Margin</div><div>$${fmtNum(p.margin_usdt)} x ${p.leverage}</div>
           <div class="k">Qty</div><div>${fmtNum(p.quantity, 3)}</div>
           <div class="k">Duration</div><div>${p.duration || '--'}</div>
           <div class="k">Take Profit</div><div class="positive">${fmtNum(p.tp_price, 6)}</div>
@@ -183,7 +193,7 @@ function getFilteredTrades(rows) {
 function renderTrades(rows) {
   latestTrades = rows || [];
   const trades = getFilteredTrades(latestTrades);
-  document.getElementById('tradeCountPill').textContent = `${trades.length} trades`;
+  setText('tradeCountPill', `${trades.length} trades`);
   const body = document.getElementById('tradeRows');
 
   if (!trades.length) {
@@ -217,10 +227,10 @@ function renderStatus(account, stats, openPositions, trades) {
   const s1Losses = stats.consec_losses?.S1_EMA_CROSS ?? stats.consec_losses?.S1 ?? 0;
   const s2Losses = stats.consec_losses?.S2_MA44_BOUNCE ?? stats.consec_losses?.S2 ?? 0;
 
-  updateChip('botStateChip', `Bot Live • ${openPositions.length} open`, 'neutral');
+  updateChip('botStateChip', `Bot Live - ${openPositions.length} open`, 'neutral');
   updateChip('apiStateChip', accountOk ? 'Binance API OK' : 'API Needs Attention', accountOk ? 'good' : 'bad');
 
-  items.push(`<li>Binance account API: <strong class="${accountOk ? 'positive' : 'negative'}">${accountOk ? 'OK' : 'Error'}</strong>${account.msg ? ` — ${account.msg}` : ''}</li>`);
+  items.push(`<li>Binance account API: <strong class="${accountOk ? 'positive' : 'negative'}">${accountOk ? 'OK' : 'Error'}</strong>${account.msg ? ` - ${account.msg}` : ''}</li>`);
   items.push(`<li>Open positions tracker: <strong>${openPositions.length}</strong> active</li>`);
   items.push(`<li>Closed trades loaded: <strong>${parseTradeRows(trades).length}</strong></li>`);
   items.push(`<li>Consecutive losses: <strong>S1=${s1Losses}</strong>, <strong>S2=${s2Losses}</strong></li>`);
@@ -229,6 +239,7 @@ function renderStatus(account, stats, openPositions, trades) {
 }
 
 async function refresh() {
+  updateChip('apiStateChip', 'Refreshing...', 'neutral');
   try {
     const [account, stats, openPositions, trades] = await Promise.all([
       getJson('/proxy/fapi/v2/account').catch(() => ({ msg: 'Failed to reach account API' })),
@@ -237,14 +248,16 @@ async function refresh() {
       getJson('/proxy/trades').catch(() => ([])),
     ]);
 
-    const summary = summarizeTrades(trades);
+    const safePositions = Array.isArray(openPositions) ? openPositions : [];
+    const safeTrades = Array.isArray(trades) ? trades : [];
+    const summary = summarizeTrades(safeTrades);
     renderSummary(account, stats, summary);
     renderStrategies(stats, summary);
     renderWallet(account);
-    renderPositions(openPositions || []);
-    renderTrades(trades || []);
-    renderStatus(account, stats, openPositions || [], trades || []);
-    document.getElementById('lastUpdated').textContent = `Updated ${new Date().toLocaleTimeString()}`;
+    renderPositions(safePositions);
+    renderTrades(safeTrades);
+    renderStatus(account, stats, safePositions, safeTrades);
+    setText('lastUpdated', `Updated ${new Date().toLocaleTimeString()}`);
   } catch (e) {
     console.error(e);
     updateChip('apiStateChip', 'Refresh Failed', 'bad');
