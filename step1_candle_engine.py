@@ -76,7 +76,10 @@ else:
 REST_DATA_BASE = "https://fapi.binance.com/fapi"   # candle seeding (always live public)
 
 # WebSocket — futures stream only
-WS_BASE = "wss://fstream.binance.com/stream"
+if TESTNET:
+    WS_BASE = "wss://fstream.binancefuture.com/stream"
+else:
+    WS_BASE = "wss://fstream.binance.com/stream"
 
 # All symbols in this list must exist on Binance Futures
 # All symbols use the futures stream — no spot stream
