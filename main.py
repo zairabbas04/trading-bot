@@ -232,8 +232,40 @@ def main():
         if alerts: alerts.on_error("Bot stopped by user (KeyboardInterrupt)")
 
 
+# ── Bot bootstrap ────────────────────────────────────────────────────────────
+# IMPORTANT: starting the bot must happen at MODULE LEVEL so it works under both:
+#   1) `python main.py`           (local / VPS direct run)
+#   2) `gunicorn main:app`        (Railway / Heroku / any WSGI host)
+#
+# If the bot were only started inside `if __name__ == '__main__':`, gunicorn
+# would import this module, serve Flask, and never run the trading thread —
+# the dashboard would load but no signals would fire and no trades would open.
+# That was the bug: on Railway the bot ran the Flask routes only.
+import threading
+
+_bot_thread_lock  = threading.Lock()
+_bot_thread       = None
+
+def _start_bot_once():
+    """Start the trading thread exactly once per process."""
+    global _bot_thread
+    # Skip the Werkzeug auto-reloader's parent process so we don't start twice in dev
+    if os.environ.get('WERKZEUG_RUN_MAIN') == 'false':
+        return
+    with _bot_thread_lock:
+        if _bot_thread is not None and _bot_thread.is_alive():
+            return
+        log.info("Starting bot trading thread...")
+        _bot_thread = threading.Thread(target=main, daemon=True, name='bot_main')
+        _bot_thread.start()
+
+# Start the bot when the module is imported (covers gunicorn) and also when
+# run directly. The lock above guarantees a single start per process — if
+# gunicorn is configured with multiple workers, each worker will start its
+# own bot, which would cause duplicate trades. Keep gunicorn at --workers 1
+# (see Procfile) for that reason.
+_start_bot_once()
+
 if __name__ == '__main__':
-    import threading
-    t = threading.Thread(target=main, daemon=True)
-    t.start()
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)),
+            use_reloader=False)  # reloader would fork and double-start the bot
