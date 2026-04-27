@@ -411,6 +411,13 @@ class CandleEngine:
         self.callback = callback
         self.store    = CandleStore(symbols)
         self._running = False
+        # Watchdog: tracks last time ANY websocket message arrived (not just candle closes).
+        # Binance sends partial-candle updates every ~1–2 seconds, so a silence of more than
+        # ~60 seconds means the stream is dead even if the socket reports "connected".
+        # Railway's network sometimes drops streams without delivering a close event, so we
+        # need this to detect it; the library's built-in ping/pong is not enough.
+        self._last_msg_ts = 0
+        self._ws_app      = None   # set inside _ws_loop so the watchdog can close it
 
     def start(self):
         """Seed history then start WebSocket loop (blocking)."""
@@ -421,10 +428,47 @@ class CandleEngine:
         seed_all(self.symbols, self.store)
 
         self._running = True
+
+        # Start the watchdog before the websocket loop. It runs in its own daemon thread
+        # and force-closes the socket if no messages arrive for too long, which causes
+        # run_forever to return and the outer reconnect loop to fire.
+        watchdog = threading.Thread(target=self._watchdog_loop, daemon=True, name='ws_watchdog')
+        watchdog.start()
+
         self._ws_loop()
 
     def stop(self):
         self._running = False
+
+    def _watchdog_loop(self):
+        """
+        Detect silent websocket failures (connection 'open' but no data flowing).
+        On Railway and similar PaaS networks, streams sometimes die without
+        delivering a close frame, so the library never invokes on_close and
+        run_forever blocks forever. Checking message-arrival staleness is the
+        only reliable way to catch this.
+        """
+        STALE_AFTER_SEC = 90   # Binance sends partial-candle updates every ~1-2s; 90s is generous
+        CHECK_EVERY_SEC = 30
+        while self._running:
+            time.sleep(CHECK_EVERY_SEC)
+            if self._last_msg_ts == 0:
+                # Haven't received the first message yet. Don't trip on cold start.
+                continue
+            silence = time.time() - self._last_msg_ts
+            if silence > STALE_AFTER_SEC:
+                log.warning(
+                    f"[WATCHDOG] No websocket messages for {silence:.0f}s — "
+                    f"stream appears frozen. Forcing reconnect."
+                )
+                ws = self._ws_app
+                if ws is not None:
+                    try:
+                        ws.close()   # makes run_forever return; outer loop reconnects
+                    except Exception as e:
+                        log.error(f"[WATCHDOG] Error closing stale socket: {e}")
+                # Reset so we don't keep firing close() in a loop while the new socket warms up
+                self._last_msg_ts = time.time()
 
     def _ws_loop(self):
         """Outer loop — reconnects on any error. Single futures stream for all symbols."""
@@ -442,15 +486,18 @@ class CandleEngine:
                 on_close   = self._on_close,
                 on_open    = self._on_open,
             )
+            self._ws_app = ws   # so the watchdog can close it
 
             ws.run_forever(ping_interval=20, ping_timeout=10)
 
+            self._ws_app = None
             if self._running:
                 log.warning(f"WebSocket disconnected. Reconnecting in {RECONNECT_SEC}s...")
                 time.sleep(RECONNECT_SEC)
 
     def _on_open(self, ws):
         log.info("WebSocket connected [OK]")
+        self._last_msg_ts = time.time()   # reset watchdog on (re)connect
 
     def _on_error(self, ws, error):
         log.error(f"WebSocket error: {error}")
@@ -459,6 +506,9 @@ class CandleEngine:
         log.info(f"WebSocket closed: {code} {msg}")
 
     def _on_message(self, ws, raw):
+        # Stamp the watchdog FIRST, before any parsing — even partial-candle ticks count
+        # as "stream alive" for staleness detection.
+        self._last_msg_ts = time.time()
         try:
             msg  = json.loads(raw)
             data = msg.get('data', {})
