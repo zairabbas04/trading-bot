@@ -1008,6 +1008,28 @@ class OrderManager:
                 sl_filled = sl_order.get('algoStatus') == 'FINISHED'
 
                 if not tp_filled and not sl_filled:
+                    # Neither algo order is FINISHED. But the algo could be CANCELED/EXPIRED
+                    # while the position itself was closed by other means (manual close,
+                    # liquidation, algo service hiccup on demo). Verify the actual position
+                    # state on Binance — if it's gone, reconcile from userTrades.
+                    tp_status = tp_order.get('algoStatus')
+                    sl_status = sl_order.get('algoStatus')
+                    if tp_status not in ('NEW', 'TRIGGERING', 'TRIGGERED') or \
+                       sl_status not in ('NEW', 'TRIGGERING', 'TRIGGERED'):
+                        # At least one algo is in a terminal non-filled state — check position
+                        try:
+                            pos_risk = self.client.get_position(pos.symbol)
+                            pos_amt  = float(pos_risk.get('positionAmt', 0))
+                            if pos_amt == 0:
+                                log.warning(
+                                    f"[RECONCILE] {pos.symbol}: algo statuses "
+                                    f"TP={tp_status} SL={sl_status} but position is closed "
+                                    f"on Binance — reconciling from userTrades"
+                                )
+                                self._reconcile_closed_position(pos)
+                                continue
+                        except Exception as rc_err:
+                            log.error(f"[RECONCILE] {pos.symbol}: position check failed: {rc_err}")
                     continue
 
                 outcome = 'WIN' if tp_filled else 'LOSS'
@@ -1052,57 +1074,73 @@ class OrderManager:
                     pos_risk = self.client.get_position(pos.symbol)
                     pos_amt  = float(pos_risk.get('positionAmt', 0))
                     if pos_amt == 0:
-                        # Position is gone on Binance — find actual exit from userTrades
                         log.warning(f"[RECONCILE] {pos.symbol}: no open position on Binance, "
                                     f"position closed externally — fetching exit price from trades")
-                        try:
-                            trades = self.client._get('/v1/userTrades',
-                                                      {'symbol': pos.symbol, 'limit': 10},
-                                                      signed=True)
-                            # Find the closing trade (opposite side to entry)
-                            close_side = 'SELL' if pos.direction == 'LONG' else 'BUY'
-                            close_trades = [t for t in trades
-                                           if t.get('side') == close_side
-                                           and int(t.get('time', 0)) > pos.open_ts]
-                            if close_trades:
-                                # Use the most recent closing trade price
-                                last = max(close_trades, key=lambda t: t['time'])
-                                actual_exit = float(last['price'])
-                                realized    = sum(float(t.get('realizedPnl', 0)) for t in close_trades)
-                            else:
-                                actual_exit = pos.sl_price  # conservative fallback
-                                realized    = None
-
-                            # Determine outcome from exit price
-                            if pos.direction == 'LONG':
-                                outcome = 'WIN' if actual_exit >= pos.tp_price else 'LOSS'
-                            else:
-                                outcome = 'WIN' if actual_exit <= pos.tp_price else 'LOSS'
-
-                            log.warning(f"[RECONCILE] {pos.symbol}: exit={actual_exit:.6f} "
-                                        f"outcome={outcome} realizedPnl={realized}")
-
-                            self._log_trade_close(pos, outcome, exit_price=actual_exit)
-
-                            with self._lock:
-                                self._open_positions.pop(pos.symbol, None)
-                                # Normalize strategy full-name ('S1_EMA_CROSS') to short key ('S1')
-                                strat = pos.strategy.split('_')[0] if pos.strategy else 'S1'
-                                if outcome == 'WIN':
-                                    self._consec_losses[strat] = 0
-                                else:
-                                    self._consec_losses[strat] = self._consec_losses.get(strat, 0) + 1
-
-                            if self.detector:
-                                self.detector.on_trade_closed(pos.symbol, pos.strategy, outcome)
-
-                        except Exception as rec_err:
-                            log.error(f"[RECONCILE] {pos.symbol}: failed to fetch exit trades: {rec_err}")
+                        self._reconcile_closed_position(pos)
                     else:
                         log.warning(f"[RECONCILE] {pos.symbol}: position still open on Binance "
                                     f"(amt={pos_amt}) — algo order query failed but position alive")
                 except Exception as risk_err:
                     log.error(f"Could not reconcile position {pos.symbol}: {risk_err}")
+
+    def _reconcile_closed_position(self, pos):
+        """
+        Position closed on Binance but bot never saw the algo fill (e.g. algo got
+        CANCELED/EXPIRED but position closed by other means). Fetch the actual
+        exit price from /userTrades, log the close, and free the symbol gate.
+        Used by both the algo-status branch and the exception fallback in
+        _check_positions, so the reconciliation logic only lives in one place.
+        """
+        try:
+            trades = self.client._get('/v1/userTrades',
+                                      {'symbol': pos.symbol, 'limit': 10},
+                                      signed=True)
+            # Find the closing trade (opposite side to entry)
+            close_side = 'SELL' if pos.direction == 'LONG' else 'BUY'
+            close_trades = [t for t in trades
+                           if t.get('side') == close_side
+                           and int(t.get('time', 0)) > pos.open_ts]
+            if close_trades:
+                # Use the most recent closing trade price
+                last = max(close_trades, key=lambda t: t['time'])
+                actual_exit = float(last['price'])
+                realized    = sum(float(t.get('realizedPnl', 0)) for t in close_trades)
+            else:
+                actual_exit = pos.sl_price  # conservative fallback
+                realized    = None
+
+            # Determine outcome from exit price relative to TP/SL
+            if pos.direction == 'LONG':
+                outcome = 'WIN' if actual_exit >= pos.tp_price else 'LOSS'
+            else:
+                outcome = 'WIN' if actual_exit <= pos.tp_price else 'LOSS'
+
+            log.warning(f"[RECONCILE] {pos.symbol}: exit={actual_exit:.6f} "
+                        f"outcome={outcome} realizedPnl={realized}")
+
+            self._log_trade_close(pos, outcome, exit_price=actual_exit)
+
+            with self._lock:
+                self._open_positions.pop(pos.symbol, None)
+                strat = pos.strategy.split('_')[0] if pos.strategy else 'S1'
+                if outcome == 'WIN':
+                    self._consec_losses[strat] = 0
+                else:
+                    self._consec_losses[strat] = self._consec_losses.get(strat, 0) + 1
+
+            # Best-effort: cancel any leftover algo orders so they don't trigger later
+            for oid in (pos.tp_order_id, pos.sl_order_id):
+                if oid:
+                    try:
+                        self.client.cancel_algo_order(oid)
+                    except Exception:
+                        pass   # already canceled/expired — ignore
+
+            if self.detector:
+                self.detector.on_trade_closed(pos.symbol, pos.strategy, outcome)
+
+        except Exception as rec_err:
+            log.error(f"[RECONCILE] {pos.symbol}: failed to fetch exit trades: {rec_err}")
 
     # ── Logging ───────────────────────────────────────────────────────────────
 
