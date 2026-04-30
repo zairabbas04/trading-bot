@@ -209,9 +209,9 @@ class SignalDetector:
         if not f2:
             return   # try again next candle (N+1)
 
-        # F3 — EMA200 trend gate
-        if direction == 'LONG'  and c_close <= ema200: return
-        if direction == 'SHORT' and c_close >= ema200: return
+        # F3 — EMA200 trend gate  (DISABLED — was rejecting too many counter-trend signals)
+        # if direction == 'LONG'  and c_close <= ema200: return
+        # if direction == 'SHORT' and c_close >= ema200: return
 
         # F4 — ADX strength
         if adx <= S1_ADX_MIN: return
